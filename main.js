@@ -1,161 +1,210 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const loginUsername = document.getElementById('login-username');
-    const loginPassword = document.getElementById('login-password');
-    const loginBtn = document.getElementById('login-btn');
-    const registerBtn = document.getElementById('register-btn');
-    const taskManager = document.getElementById('task-manager');
-    const addTaskBtn = document.getElementById('add-task');
-    const taskList = document.getElementById('task-list');
+const API_BASE_URL = 'https://demo2.z-bit.ee';
+let tasks = [];
+let user = null;
 
-    if (!loginUsername || !loginPassword || !loginBtn || !registerBtn || !taskManager || !addTaskBtn || !taskList) {
-        console.error('Required elements are missing in the DOM.');
-        return;
+const taskList = document.querySelector('#task-list');
+const addTaskButton = document.querySelector('#add-task');
+const newTaskInput = document.querySelector('#new-task-input');
+const loginForm = document.querySelector('#login-form');
+const registerForm = document.querySelector('#register-form');
+const logoutButton = document.querySelector('#logout-button');
+const taskSection = document.querySelector('#task-section');
+const authSection = document.querySelector('#auth-section');
+
+function showAuthSection() {
+    authSection.style.display = 'block';
+    taskSection.style.display = 'none';
+}
+
+function showTaskSection() {
+    authSection.style.display = 'none';
+    taskSection.style.display = 'block';
+}
+
+async function fetchTasks() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/tasks`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        if (!response.ok) throw new Error('Failed to fetch tasks');
+        tasks = await response.json();
+        renderTasks();
+    } catch (error) {
+        console.error('Error fetching tasks:', error);
+        alert('Error fetching tasks. Please try logging in again.');
     }
+}
 
-    loginBtn.addEventListener('click', async () => {
-        const username = loginUsername.value;
-        const password = loginPassword.value;
+function renderTasks() {
+    taskList.innerHTML = '';
+    tasks.forEach(renderTask);
+}
 
-        if (!username || !password) {
-            alert('Please enter both username and password.');
-            return;
-        }
+function renderTask(task) {
+    const taskRow = createTaskRow(task);
+    taskList.appendChild(taskRow);
+}
 
-        try {
-            await loginUser(username, password);
-            taskManager.style.display = 'block';
-            document.getElementById('auth-form').style.display = 'none';
-            fetchTasks(); // Load tasks after login
-        } catch (error) {
-            console.error('Login error:', error);
-            alert('Login failed.');
-        }
-    });
+function createTaskRow(task) {
+    let taskRow = document.querySelector('[data-template="task-row"]').cloneNode(true);
+    taskRow.removeAttribute('data-template');
 
-    registerBtn.addEventListener('click', async () => {
-        const username = loginUsername.value;
-        const password = loginPassword.value;
+    const name = taskRow.querySelector("[name='name']");
+    name.value = task.title;
+    name.addEventListener('change', () => updateTask(task.id, { title: name.value }));
 
-        if (!username || !password) {
-            alert('Please enter both username and password.');
-            return;
-        }
+    const checkbox = taskRow.querySelector("[name='completed']");
+    checkbox.checked = task.marked_as_done;
+    checkbox.addEventListener('change', () => updateTask(task.id, { marked_as_done: checkbox.checked }));
 
-        try {
-            await registerUser(username, password);
-            alert('Registration successful. You can now log in.');
-        } catch (error) {
-            console.error('Registration error:', error);
-            alert('Registration failed.');
-        }
-    });
+    const deleteButton = taskRow.querySelector('.delete-task');
+    deleteButton.addEventListener('click', () => deleteTask(task.id));
 
-    addTaskBtn.addEventListener('click', async () => {
-        const taskName = prompt('Enter task name:');
-        if (!taskName) {
-            alert('Task name cannot be empty.');
-            return;
-        }
+    hydrateAntCheckboxes(taskRow);
 
-        try {
-            await addTask(taskName);
-            fetchTasks(); // Refresh task list after adding a new task
-        } catch (error) {
-            console.error('Add task error:', error);
-            alert('Failed to add task.');
-        }
-    });
+    return taskRow;
+}
 
-    async function fetchJson(url, options) {
-        const response = await fetch(url, options);
-        if (!response.ok) {
-            throw new Error(`HTTP error ${response.status}`);
-        }
-        return response.json();
-    }
-
-    async function registerUser(username, password) {
-        const url = 'http://demo2.z-bit.ee/users';
-        const options = {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ username, password })
-        };
-        await fetchJson(url, options);
-    }
-
-    async function loginUser(username, password) {
-        const url = 'http://demo2.z-bit.ee/users/get-token';
-        const options = {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ username, password })
-        };
-        const response = await fetchJson(url, options);
-        localStorage.setItem('token', response.token); // Store token for authentication
-    }
-
-    async function fetchTasks() {
-        const token = localStorage.getItem('token');
-        const url = 'http://demo2.z-bit.ee/tasks';
-        const options = {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        };
-        const tasks = await fetchJson(url, options);
-        renderTasks(tasks);
-    }
-
-    async function addTask(name) {
-        const token = localStorage.getItem('token');
-        const url = 'http://demo2.z-bit.ee/tasks';
-        const options = {
+async function addTask() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/tasks`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
             },
-            body: JSON.stringify({ name })
-        };
-        await fetchJson(url, options);
+            body: JSON.stringify({ title: newTaskInput.value })
+        });
+        if (!response.ok) throw new Error('Failed to add task');
+        const newTask = await response.json();
+        tasks.push(newTask);
+        renderTask(newTask);
+        newTaskInput.value = '';
+    } catch (error) {
+        console.error('Error adding task:', error);
+        alert('Error adding task. Please try again.');
     }
+}
 
-    function renderTasks(tasks) {
-        taskList.innerHTML = ''; // Clear existing tasks
-        tasks.forEach(task => {
-            const taskItem = document.createElement('li');
-            taskItem.className = 'ant-list-item';
-            taskItem.innerHTML = `
-                <div class="ant-row ant-row-space-between ant-row-middle" style="width: 100%;">
-                    <div class="ant-space ant-space-horizontal ant-space-align-center" style="gap: 8px;">
-                        <div class="ant-space-item">
-                            <label class="ant-checkbox-wrapper">
-                                <span class="ant-checkbox">
-                                    <input name="completed" type="checkbox" class="ant-checkbox-input" ${task.completed ? 'checked' : ''}>
-                                    <span class="ant-checkbox-inner"></span>
-                                </span>
-                            </label>
-                        </div>
-                        <div class="ant-space-item">
-                            <input name="name" class="ant-input" type="text" value="${task.name}">
-                        </div>
-                    </div>
-                    <button class="delete-task" type="button" class="ant-btn ant-btn-text">
-                        <span role="img" aria-label="delete" class="anticon anticon-delete">
-                            <svg viewBox="64 64 896 896" focusable="false" data-icon="delete" width="1em" height="1em" fill="currentColor" aria-hidden="true">
-                                <path d="M360 184h-8c4.4 0 8-3.6 8-8v8h304v-8c0 4.4 3.6 8 8 8h-8v72h72v-80c0-35.3-28.7-64-64-64H352c-35.3 0-64 28.7-64 64v80h72v-72zm504 72H160c-17.7 0-32 14.3-32 32v32c0 4.4 3.6 8 8 8h60.4l24.7 523c1.6 34.1 29.8 61 63.9 61h454c34.2 0 62.3-26.8 63.9-61l24.7-523H888c4.4 0 8-3.6 8-8v-32c0-17.7-14.3-32-32-32zM731.3 840H292.7l-24.2-512h487l-24.2 512z"></path>
-                            </svg>
-                        </span>
-                    </button>
-                </div>
-            `;
-            taskList.appendChild(taskItem);
+async function updateTask(id, updates) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/tasks/${id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify(updates)
+        });
+        if (!response.ok) throw new Error('Failed to update task');
+        const updatedTask = await response.json();
+        tasks = tasks.map(task => task.id === id ? updatedTask : task);
+        renderTasks();
+    } catch (error) {
+        console.error('Error updating task:', error);
+        alert('Error updating task. Please try again.');
+    }
+}
+
+async function deleteTask(id) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/tasks/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        if (!response.ok) throw new Error('Failed to delete task');
+        tasks = tasks.filter(task => task.id !== id);
+        renderTasks();
+    } catch (error) {
+        console.error('Error deleting task:', error);
+        alert('Error deleting task. Please try again.');
+    }
+}
+
+async function login(username, password) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/users/get-token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        if (!response.ok) throw new Error('Invalid credentials');
+        user = await response.json();
+        localStorage.setItem('token', user.access_token);
+        showTaskSection();
+        fetchTasks();
+    } catch (error) {
+        console.error('Login error:', error);
+        alert('Login failed. Please check your credentials and try again.');
+    }
+}
+
+async function register(username, password) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/users`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, newPassword: password })
+        });
+        if (!response.ok) throw new Error('Registration failed');
+        user = await response.json();
+        localStorage.setItem('token', user.access_token);
+        showTaskSection();
+        fetchTasks();
+    } catch (error) {
+        console.error('Registration error:', error);
+        alert('Registration failed. The username might already be taken.');
+    }
+}
+
+function logout() {
+    localStorage.removeItem('token');
+    user = null;
+    tasks = [];
+    showAuthSection();
+}
+
+addTaskButton.addEventListener('click', addTask);
+
+loginForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const username = document.querySelector('#login-username').value;
+    const password = document.querySelector('#login-password').value;
+    login(username, password);
+});
+
+registerForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const username = document.querySelector('#register-username').value;
+    const password = document.querySelector('#register-password').value;
+    register(username, password);
+});
+
+logoutButton.addEventListener('click', logout);
+
+if (localStorage.getItem('token')) {
+    showTaskSection();
+    fetchTasks();
+} else {
+    showAuthSection();
+}
+
+function hydrateAntCheckboxes(element) {
+    const elements = element.querySelectorAll('.ant-checkbox-wrapper');
+    for (let i = 0; i < elements.length; i++) {
+        let wrapper = elements[i];
+        if (wrapper.__hydrated)
+            continue;
+        wrapper.__hydrated = true;
+
+        const checkbox = wrapper.querySelector('.ant-checkbox');
+        const input = wrapper.querySelector('.ant-checkbox-input');
+        if (input.checked) {
+            checkbox.classList.add('ant-checkbox-checked');
+        }
+
+        input.addEventListener('change', () => {
+            checkbox.classList.toggle('ant-checkbox-checked');
         });
     }
-});
+}
