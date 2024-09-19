@@ -51,7 +51,7 @@ function createTaskRow(task) {
 
     const name = taskRow.querySelector("[name='name']");
     name.value = task.title;
-    name.addEventListener('change', () => updateTask(task.id, { title: name.value }));
+    name.addEventListener('keyup', throttle(updateTask.bind(null,task.id, { title: name.value }), 1000));
 
     const checkbox = taskRow.querySelector("[name='completed']");
     checkbox.checked = task.marked_as_done;
@@ -99,11 +99,31 @@ async function updateTask(id, updates) {
         if (!response.ok) throw new Error('Failed to update task');
         const updatedTask = await response.json();
         tasks = tasks.map(task => task.id === id ? updatedTask : task);
-        renderTasks();
+        //renderTasks();P
     } catch (error) {
         console.error('Error updating task:', error);
         alert('Error updating task. Please try again.');
     }
+}
+
+function throttle(func, interval) {
+    // A flag variable to track whether the function is running or not
+    let isRunning = false;
+    // Return a function that takes arguments
+    return function(...args) {
+        // If the function is not running
+        if (!isRunning) {
+            // Set the flag to true
+            isRunning = true;
+            // Apply the function with arguments
+            func.apply(this, args);
+            // Set a timer that will reset the flag after the interval
+            setTimeout(() => {
+                // Set the flag to false
+                isRunning = false;
+            }, interval);
+        }
+    };
 }
 
 async function deleteTask(id) {
